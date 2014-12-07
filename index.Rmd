@@ -1,0 +1,286 @@
+---
+title       : TS Final Project
+subtitle    : Southern Oscillation Index
+author      : Xiang Liu (Dennis)
+framework   : impressjs        # {io2012, html5slides, shower, dzslides, ...}
+highlighter : highlight.js  # {highlight.js, prettify, highlight}
+hitheme     : tomorrow      # 
+widgets     : []            # {mathjax, quiz, bootstrap}
+mode        : selfcontained # {standalone, draft}
+knit        : slidify::knit2slides
+github:
+  user: XLdennis
+  repo: TS-soi
+--- 
+
+
+
+### <b>title</b> : TS Final Project
+### <b>subtitle</b>  : Southern Oscillation Index
+### <b>author</b> : Xiang Liu (Dennis)
+
+--- .slide x:-2000 y:-1500
+# Data Information
+</br>
+### __Data source__: [Dr. Mike West's lab at Duke University](https://stat.duke.edu/~mw/ts_data_sets.html)
+</br>
+### __Variable__: Monthly values of the Southern Oscillation Index (SOI)
+</br>
+### __Yearly Data__: 1950-1994 (540 monthly observations)
+
+--- .slide x:-1000 y:-1500
+
+# Time Series Plot
+```{r,echo=F,warning=F,message=F, fig.width=10}
+library(RCurl)
+URL="https://stat.duke.edu/~mw/data-sets/ts_data/soi"
+soi=getURL(URL)
+soi=read.table(textConnection(soi), skip=15)
+soi.ts=ts(soi, frequency=12, start=c(1950,1))
+ts.plot(soi.ts,main="Monthly values of the Southern Oscillation Index", xlim=c(1950,2000), ylab='SOI', type='o')
+abline(h=0,col='red')
+```
+
+<font size="3"> 
+<p style="line-height:50%">
+1. Time series overall seems to be stationary with little bit increasing variance since 1980. </br>
+2. The Southern Oscillation Index (SOI) is the monthly fluctuations of air pressure difference between Tahiti and Darwin </br>
+3. The consistent negative phase of the SOI represents a below-normal air pressure at Tahiti and above-normal air pressure at Darwin- El Niño (vice versa for positive value).
+
+--- .slide x:0 y:-1500
+
+# Check Stationary Process
+```{r check stationary, echo=F, comment=NA, message=FALSE , warning=FALSE, fig.height=5,fig.width=5.3}
+library(TSA)
+acf(soi.ts,main="ACF Southern Oscillation Index", xlab='seasonal lag', ci.type="ma") 
+pacf(soi.ts,main="PACF Southern Oscillation Index", xlab='Seasonal Lag')
+```
+
+<font size="3"> 
+<p style="line-height:50%">
+
+- 1: Both ACF and PACF plots show signs of stationary and suggest us to take a look at AR(p) model. 
+- 2: Agmented Dickey-Fuller test also supports my thought. It's stationary at the p-value of 0.01.
+
+--- .slide x:1000 y:-1500
+
+# Decomposition Process
+```{r decomposition, echo=F, comment=NA, message=FALSE , warning=FALSE,fig.width=10,fig.height=7}
+plot(decompose(soi.ts))
+```
+<font size="4"> 
+<p style="line-height:50%">
+
+- 1: Trend seem to be harmonic
+- 2: There seems to be a strong pattern of seasonality, but let's find it out.
+
+--- .slide x:2000 y:-1500
+
+# Nonlinear Transformation
+```{r boxcox transformation, echo=F, comment=NA, message=FALSE , warning=FALSE,fig.height=5,fig.width=5.3}
+library(TSA)
+soi.log=soi.ts-min(soi.ts)+1
+BoxCox.ar(soi.log)
+m=length(soi.log)
+soi.m=numeric(m)
+soi.sd=numeric(m)
+for (i in 1:m) {
+  soi.m[i]=mean(soi.log[1:i])
+}
+for (i in 1:m) {
+  soi.sd[i]=sd(soi.log[1:i])
+}
+soi.reg <- lm(log(soi.sd)~log(soi.m))
+par(cex=.8)
+plot(log(soi.m),log(soi.sd), main='ln(SD) vs ln(MEAN)', xlab='ln(MEAN)',ylab='ln(SD)')
+abline(soi.reg)
+```
+<font size="4"> 
+<p style="line-height:50%">
+
+- 1. Although lambda=1 isn't included in the 95% CI of BoxCox plot, high log liklihood still holds for non-transformation
+- 2. There is a significant linear relationship between Ln(mean) and Ln(sd) and the parameter is 1.0 which suggests me not to take transformation (am I correct?)
+
+--- #ing x:850 y:3000 rot:145 scale:5
+
+- Since it's stationary already, let's go further to find if there is <b class="positioning">seasonality</b>^*
+
+--- .slide x:6700 y:-280 z:0
+# Time Series Plot of Seasonality
+```{r seasonality, echo=F, comment=NA, message=FALSE , warning=FALSE, fig.width=10, fig.height= 3.5}
+library(TSA)
+plot(soi.ts,main="Time Series Plot with Monthly Label", ylab='Southern Oscillation Index')
+points(y=soi.ts,x=time(soi.ts),pch=as.vector(season(soi.ts)))
+library(ggplot2)
+month_range = factor(month.name,levels=month.name)
+measure = soi.ts
+mydata = data.frame(month_range, measure)
+names(mydata)=c('month','measure')
+ggplot(mydata, aes(x=month, y=measure)) + 
+  geom_boxplot(aes(fill=measure)) + xlab("Month") + ylab("Southern Oscillation Index") + scale_fill_discrete(name = "Measure")
+```
+<font size="3.5"> 
+- no strong seasonal pattern is detected, which doesn't seem to make sense to me!
+
+--- .slide x:6700 y:-270 z:-1500
+# Cumulative Periodgram
+```{r cp analysis, echo=F, comment=NA, message=FALSE , warning=FALSE, fig.width=10, fig.height=6,cache=TRUE}
+cpgram(soi.ts)
+```
+<font size="3.5"> 
+- 1. It doens't look like white noise
+- 2. There is no sudden jump at freq=0.8 which supports my hypothesis of no seasonality
+- 3. More variance goes to the low frequencies. 
+
+--- .slide x:6700 y:-270 z:-3000
+# Spectral Analysis
+```{r spectral analysis, echo=F, comment=NA, message=FALSE , warning=FALSE, fig.width=10, fig.height=6,cache=TRUE}
+perioplot<-function(x){
+adjx=x-mean(x); 
+tf=fft(adjx); 
+nf=length(tf); n2=nf/2+1; 
+pritf<-tf[c(1:n2)]; 
+intensity<-(abs(pritf^2))/nf; 
+nyquist=1/2; pfreq<-seq(0,nf/2,by=1); 
+freq<-pfreq/(length(pfreq)-1)*nyquist; 
+intmax<-max(intensity)
+posmax<-max.col(t(intensity))
+freqmax<-(freq[posmax])
+maxper<-1/freqmax
+plot(freq,intensity,type="l")
+text(0.2,intmax, label= maxper)}
+# t=time(soi.ts)
+# fit = lm(soi.ts ~ t + I(t^2) + I(t^3))
+# soi.detrend=fit$resid
+perioplot(soi.ts)
+```
+<font size="3"> 
+<p style="line-height:50%">
+- 1. No matter if I detrend the data or not, the periodplot spike at a period of 60 month (5 years). 
+- 2. As expected, strong pattern is seen at low frequencies. 
+- 3. Still, it's odd not to see any seasonality given this is a climate index monthly data (freq=0.8)
+
+--- #big x:3500 y:2100 z: 3000 rot:180 scale:5
+<b>Next Step</b> <span class="thoughts">Let's fit an Arima model</span>
+
+--- .slide x:2825 y:2325 scale:2
+# ACF and PACF
+```{r model selection 1, echo=F, comment=NA, message=FALSE , warning=FALSE, cache=T, fig.width=9, fig.height=4}
+soi.df=diff(soi.ts)
+acf(soi.ts,main="ACF Southern Oscillation Index", xlim=c(0,1),xlab='seasonal lag', ci.type="ma") 
+pacf(soi.ts,main="PACF Southern Oscillation Index", xlim=c(0,1), xlab='Seasonal Lag')
+soi.lm1=arima(soi.ts,order=c(1,0,1),include.mean=F)
+soi.lm2=arima(soi.ts,order=c(1,1,2),include.mean=F)
+```
+
+--- .slide x:2825 y:2325 z:-3000 scale:2
+# Model Specification
+```{r specification, echo=F, comment=NA, message=FALSE , warning=FALSE, cache=TRUE}
+x=numeric(8)
+z=numeric(8)
+y=matrix(,8,5)
+n=1
+for (a in 0:1) {
+    for (b in 0:3) {
+      x[n]=arima(soi.ts,order = c(1,a,b),include.mean = T)$aic
+      z[n]=arima(soi.ts,order = c(1,a,b),include.mean = F)$aic
+      y[n,]=c(1,a,b,x[n],z[n])
+      n=n+1
+      }
+    }
+rownames(y)=c(1:8)
+colnames(y)=c('AR(p)', 'Differencing', 'MA(q)','AIC(with constant)','AIC')
+print(y[,c(1:3,5)])
+```
+<font size="4"> 
+- 
+- 1. Since AIC suggests AR(1) and PAIC suggests an MA(1), I decide to take a look at all possibilities of ARIMA models
+- 2. It seems that ARIMA(1,0,1) model has the smallest AIC value
+
+--- .slide x:2825 y:3325 z:-3000
+# Model Diagnose
+```{r model diagnose, echo=F, comment=NA, message=FALSE , warning=FALSE,fig.height=9,fig.width=10,cache=T, results='hide'}
+tsdiag.ets <- function (object, gof.lag = 10, ...) 
+{
+    oldpar <- par(mfrow = c(3, 1))
+    on.exit(par(oldpar))
+    rs <- object$residuals
+    stdres <- rs/sqrt(object$sigma2)
+    plot(stdres, type = "h", main = "Standardized Residuals", 
+        ylab = "")
+    abline(h = 0)
+    acf(object$residuals, plot = TRUE, main = "ACF of Residuals", 
+        na.action = na.pass)
+    nlag <- gof.lag
+    pval <- numeric(nlag)
+    for (i in 1:nlag) pval[i] <- Box.test(rs, i, type = "Ljung-Box")$p.value
+    plot(1:nlag, pval, xlab = "lag", ylab = "p value", ylim = c(0, 
+        1), main = "p values for Ljung-Box statistic")
+    abline(h = 0.05, lty = 2, col = "blue")
+}
+tsdiag.ets(soi.lm1)
+```
+
+--- #one-more-thing x:2800 y:3325 z:-3010 roty:-5
+# ARIMA(1,0,1)
+```{r statistics, echo=F, comment=NA, message=FALSE , warning=FALSE, fig.height=9,fig.width=10,cache=T}
+soi.lm1$coef
+```
+<font size="5"> 
+<p style="line-height:50%">
+- 
+- both AR and MA parameters are significant to be included in the model
+
+--- .slide x:2345 y:2825 z:-2500 rot:30 
+# Model Comparison 
+```{r autoarima, echo=F, comment=NA, message=FALSE , warning=FALSE, fig.height=9,fig.width=10,cache=T, results='hide'}
+tsdiag.ets(soi.lm2)
+```
+
+--- #one-more-thing2 x:2320 y:2825 z:-2510 rot:30  roty:-5
+# ARIMA(1,1,2)
+```{r autostatistics, echo=F, comment=NA, message=FALSE , warning=FALSE, fig.height=9,fig.width=10,cache=T, fig.show='hide'}
+soi.lm2$coef
+```
+<font size="5"> 
+<p style="line-height:50%">
+- 
+- 1. The model suggested by algorithms has higher AIC
+- 2. Moreover, the $\theta_2$ isn't significant to be in the model. 
+
+--- .slide x:1945 y:2225 z:-2400 rot:90
+# Graphs
+```{r com, echo=F, comment=NA, message=FALSE , warning=FALSE, cache=T,fig.width=10,fig.height=4}
+soi.fit2=soi.ts-soi.lm2$residuals
+soi.fit1=soi.ts-soi.lm1$residuals
+require(graphics)
+ts.plot(soi.ts, soi.fit1, gpars=list(xlab="year", xlim=c(1950,1995), ylab="Southern Oscillation Index"), col=c("black","red"), main= "Model Fit of Selected Model")
+ts.plot(soi.ts,soi.fit2, gpars=list(xlab="year", xlim=c(1950,1995), ylab="Southern Oscillation Index"), col=c("black","red"), main= "Model Fit of Optimized Model")
+```
+
+--- .slide x:2225 y:1600 z:-2300 rot:140
+# Model Forecast
+```{r forecast,  echo=F, comment=NA, message=FALSE , warning=FALSE, cache=T, fig.width=10, fig.height=6}
+library(forecast)
+h=12
+soi.pr = predict(soi.lm1, n.ahead=12)
+U = soi.pr$pred + 2*soi.pr$se
+L = soi.pr$pred - 2*soi.pr$se
+n2 = length(soi.ts) 
+n1 = n2-60  #showing the last five years
+ts.plot(ts(soi.ts[n1:n2],start=c(1990,1), frequency=12),
+        xlim=c(1990,1996),ylab='Southern Oscillation Index',type="o",
+        main='Last Five Year Data',ylim=c(-6,4))
+lines(soi.pr$pred, col="red", type="o")
+lines(U, col="blue", lty="dashed")
+lines(L, col="blue", lty="dashed")
+abline(v=c(1995,1),lty="dashed", h=0)
+```
+<font size="3"> 
+<p style="line-height:50%">
+- Using a built-up model to predict 12 month data approaching the future, the graph is good at forecasting the future values of the SOI index.
+- It seems that SOI tend to go higher in the future and suggests more balanced climate at nothern Australia.(may need to further read some literature to interpret the data)
+
+--- #its-in-3d x:2225 y:1600 z:-2300 rot:140 rotx:20 roty:20
+# Thank <span class="you">You</span> for <span class="noticed"> Listening</span>
+
